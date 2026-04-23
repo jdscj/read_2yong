@@ -144,7 +144,7 @@ const firebaseConfig = {
 const fbApp = initializeApp(firebaseConfig);
 const db = getDatabase(fbApp);
 
-const PW = "1234321";
+const PW = "1234";
 const students = [
   {id:0,name:"박희락",crop:"🌽"},
   {id:1,name:"허준우",crop:"🥬"},
@@ -168,6 +168,10 @@ let D = {
   bonusGiven:[false,false,false,false,false]
 };
 
+// 지급/차감 상태
+let ts = {step:1, student:null, activity:null, coin:null, bonusTriggered:false};
+let td = {step:1, student:null, coin:null};
+
 async function save(){
   await set(ref(db,"app"), D);
 }
@@ -176,10 +180,10 @@ onValue(ref(db,"app"), (snap)=>{
   const val = snap.val();
   if(val){
     D = val;
-    D.history   = D.history   || [[],[],[],[],[]];
-    D.completed = D.completed || [[],[],[],[],[]];
-    D.bonusGiven= D.bonusGiven|| [false,false,false,false,false];
     for(let i=0;i<5;i++){
+      D.history   = D.history   || [[],[],[],[],[]];
+      D.completed = D.completed || [[],[],[],[],[]];
+      D.bonusGiven= D.bonusGiven|| [false,false,false,false,false];
       D.history[i]   = D.history[i]   || [];
       D.completed[i] = D.completed[i] || [];
     }
@@ -192,21 +196,22 @@ onValue(ref(db,"app"), (snap)=>{
   document.getElementById("syncText").textContent="연결 오류";
 });
 
+// ── 학생 카드 ──
 function renderStudents(){
   const wrap = document.getElementById("mainContent");
   wrap.innerHTML = '<div class="students-grid" id="studentsGrid"></div>';
-  const g = document.getElementById("studentsGrid");
   students.forEach((s,i)=>{
     const d = document.createElement("div");
-    d.className="student-card";
-    d.innerHTML=`<div class="crop-icon">${s.crop}</div>
+    d.className = "student-card";
+    d.innerHTML = `<div class="crop-icon">${s.crop}</div>
       <div class="student-name">${s.name}</div>
       <div class="coin-badge">${D.coins[i]} 코인</div>`;
-    d.onclick=()=>openHist(i);
-    g.appendChild(d);
+    d.onclick = ()=>openHist(i);
+    document.getElementById("studentsGrid").appendChild(d);
   });
 }
 
+// ── 학생 기록 ──
 function openHist(i){
   const s=students[i];
   document.getElementById("histTitle").innerHTML=`${s.crop} ${s.name}의 기록`;
@@ -229,81 +234,107 @@ function openHist(i){
   document.getElementById("histModal").classList.add("open");
 }
 
-window.openPw=function(){
-  document.getElementById("pwInput").value="";
-  document.getElementById("pwErr").textContent="";
-  document.getElementById("pwModal").classList.add("open");
-  setTimeout(()=>document.getElementById("pwInput").focus(),100);
-};
-window.chkPw=function(){
-  if(document.getElementById("pwInput").value===PW){
-    close1("pwModal");
-    ts={step:1,student:null,activity:null,coin:null,bonusTriggered:false};
-    document.getElementById("teacherModal").classList.add("open");
-    switchTab(1);
-  } else {
-    document.getElementById("pwErr").textContent="비밀번호가 올바르지 않습니다";
-  }
-};
-window.close1=function(id){ document.getElementById(id).classList.remove("open"); };
-document.querySelectorAll(".overlay").forEach(el=>{
-  el.addEventListener("click",e=>{ if(e.target===el) el.classList.remove("open"); });
-});
-
-window.switchTab=function(n){
+// ── 교사 탭 ──
+function switchTab(n){
   [1,2,3].forEach(i=>document.getElementById("tab"+i).className="ttab"+(i===n?" active":""));
   if(n===1){ ts={step:1,student:null,activity:null,coin:null,bonusTriggered:false}; renderGive(); }
   else if(n===2){ td={step:1,student:null,coin:null}; renderDeduct(); }
   else renderAll();
-};
+}
 
-let ts={step:1,student:null,activity:null,coin:null,bonusTriggered:false};
+// ── 코인 지급 ──
 function renderGive(){
   const c=document.getElementById("teacherContent");
   if(ts.step===1){
     c.innerHTML=`<div class="step-lbl">1단계 — 학생 선택</div>
       <div class="row-btns">${students.map((s,i)=>`
-        <button class="sbtn" onclick="window.G.gs(${i})">${s.crop} ${s.name}</button>`).join("")}</div>`;
+        <button class="sbtn" id="gs_${i}">${s.crop} ${s.name}</button>`).join("")}</div>`;
+    students.forEach((_,i)=>{
+      document.getElementById(`gs_${i}`).onclick=()=>{ ts.student=i; ts.step=2; renderGive(); };
+    });
+
   } else if(ts.step===2){
     const s=students[ts.student];
     c.innerHTML=`<div style="font-size:13px;color:#888;margin-bottom:11px">${s.crop} ${s.name}</div>
       <div class="step-lbl">2단계 — 활동 선택</div>
       <div class="act-list">${activities.map(a=>{
         const done=(D.completed[ts.student]||[]).includes(a.id);
-        return `<button class="abtn${done?" done-mark":""}" onclick="window.G.ga('${a.id}')">
+        return `<button class="abtn${done?" done-mark":""}" id="ga_${a.id}">
           <span>${a.label}</span>
           <span style="font-size:12px;color:#aaa">${a.coins.length===1?a.coins[0]:a.coins[0]+"~"+a.coins[a.coins.length-1]} 코인</span>
         </button>`;
       }).join("")}</div>
-      <button class="back-btn" onclick="ts.step=1;renderGive()">이전</button>`;
+      <button id="back2">이전</button>`;
+    activities.forEach(a=>{
+      document.getElementById(`ga_${a.id}`).onclick=()=>{ ts.activity=a.id; ts.coin=null; ts.step=3; renderGive(); };
+    });
+    document.getElementById("back2").className="back-btn";
+    document.getElementById("back2").onclick=()=>{ ts.step=1; renderGive(); };
+
   } else if(ts.step===3){
     const act=activities.find(a=>a.id===ts.activity);
     const s=students[ts.student];
     c.innerHTML=`<div style="font-size:13px;color:#888;margin-bottom:11px">${s.crop} ${s.name} · ${act.label}</div>
       <div class="step-lbl">3단계 — 코인 선택</div>
       <div class="coin-opts">${act.coins.map(cv=>`
-        <button class="copt${ts.coin===cv?" active":""}" onclick="window.G.sc(${cv})">${cv}코인</button>`).join("")}</div>
-      <button class="main-btn green" onclick="window.G.doGive()" ${ts.coin===null?"disabled":""}>🎁 선물하기</button>
-      <button class="back-btn" onclick="ts.step=2;renderGive()">이전</button>`;
+        <button class="copt${ts.coin===cv?" active":""}" id="sc_${cv}">${cv}코인</button>`).join("")}</div>
+      <button class="main-btn green" id="doGiveBtn" ${ts.coin===null?"disabled":""}>🎁 선물하기</button>
+      <button class="back-btn" id="back3">이전</button>`;
+    act.coins.forEach(cv=>{
+      document.getElementById(`sc_${cv}`).onclick=()=>{ ts.coin=cv; renderGive(); };
+    });
+    document.getElementById("doGiveBtn").onclick=doGive;
+    document.getElementById("back3").onclick=()=>{ ts.step=2; renderGive(); };
+
   } else {
+    // step 4 — 성공 화면
+    const bonusHtml = ts.bonusTriggered ? '<p class="bonus">✨ 모든 활동 완료! 보너스 5코인도 지급됐어요</p>' : "";
     c.innerHTML=`<div class="success-wrap">
       <div class="big">🎉</div>
       <p>${students[ts.student].name}에게 ${ts.coin}코인 지급!</p>
-      ${ts.bonusTriggered?'<p class="bonus">✨ 모든 활동 완료! 보너스 5코인도 지급됐어요</p>':""}
-      <button class="main-btn green" style="margin-top:18px" onclick="ts={step:1,student:null,activity:null,coin:null,bonusTriggered:false};renderGive()">계속 지급</button>
+      ${bonusHtml}
+      <button class="main-btn green" id="continueBtn" style="margin-top:18px">계속 지급</button>
     </div>`;
+    // 핵심 수정: onclick을 직접 addEventListener로 연결
+    document.getElementById("continueBtn").addEventListener("click", ()=>{
+      ts = {step:1, student:null, activity:null, coin:null, bonusTriggered:false};
+      renderGive();
+    });
   }
 }
 
-let td={step:1,student:null,coin:null};
+async function doGive(){
+  const i=ts.student;
+  const act=activities.find(a=>a.id===ts.activity);
+  const now=new Date();
+  const ds=`${now.getMonth()+1}/${now.getDate()} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+  D.coins[i]+=ts.coin;
+  D.history[i].push({label:act.label,amount:ts.coin,date:ds,bonus:false});
+  if(!D.completed[i].includes(act.id)) D.completed[i].push(act.id);
+  ts.bonusTriggered=false;
+  if(!D.bonusGiven[i]&&ALL_IDS.every(id=>D.completed[i].includes(id))){
+    D.bonusGiven[i]=true; D.coins[i]+=5;
+    D.history[i].push({label:"모든 활동 완료 보너스",amount:5,date:ds,bonus:true});
+    ts.bonusTriggered=true;
+  }
+  await save();
+  ts.step=4;
+  renderGive();
+}
+
+// ── 코인 차감 ──
 function renderDeduct(){
   const c=document.getElementById("teacherContent");
   if(td.step===1){
     c.innerHTML=`<div class="step-lbl">1단계 — 학생 선택</div>
       <div class="row-btns">${students.map((s,i)=>`
-        <button class="sbtn" onclick="window.G.ds(${i})">${s.crop} ${s.name}
+        <button class="sbtn" id="ds_${i}">${s.crop} ${s.name}
           <span style="font-size:11px;color:#aaa;margin-left:3px">${D.coins[i]}코인</span>
         </button>`).join("")}</div>`;
+    students.forEach((_,i)=>{
+      document.getElementById(`ds_${i}`).onclick=()=>{ td.student=i; td.coin=null; td.step=2; renderDeduct(); };
+    });
+
   } else if(td.step===2){
     const s=students[td.student];
     const max=D.coins[td.student];
@@ -312,19 +343,41 @@ function renderDeduct(){
       <div class="step-lbl">2단계 — 차감 코인 선택</div>
       ${opts.length
         ?`<div class="coin-opts">${opts.map(cv=>`
-            <button class="copt danger-opt${td.coin===cv?" active":""}" onclick="window.G.dc(${cv})">${cv}코인</button>`).join("")}</div>
-           <button class="main-btn red" onclick="window.G.doDeduct()" ${td.coin===null?"disabled":""}>차감하기</button>`
+            <button class="copt danger-opt${td.coin===cv?" active":""}" id="dc_${cv}">${cv}코인</button>`).join("")}</div>
+           <button class="main-btn red" id="doDeductBtn" ${td.coin===null?"disabled":""}>차감하기</button>`
         :`<p style="font-size:13px;color:#aaa;margin-bottom:14px">차감할 코인이 없습니다</p>`}
-      <button class="back-btn" onclick="td.step=1;renderDeduct()">이전</button>`;
+      <button class="back-btn" id="dback2">이전</button>`;
+    opts.forEach(cv=>{
+      document.getElementById(`dc_${cv}`).onclick=()=>{ td.coin=cv; renderDeduct(); };
+    });
+    if(opts.length) document.getElementById("doDeductBtn").onclick=doDeduct;
+    document.getElementById("dback2").onclick=()=>{ td.step=1; renderDeduct(); };
+
   } else {
     c.innerHTML=`<div class="success-wrap">
       <div class="big">✅</div>
       <p>${students[td.student].name}에게서 ${td.coin}코인 차감!</p>
-      <button class="main-btn red" style="margin-top:18px" onclick="td={step:1,student:null,coin:null};renderDeduct()">계속 차감</button>
+      <button class="main-btn red" id="continueDeductBtn" style="margin-top:18px">계속 차감</button>
     </div>`;
+    document.getElementById("continueDeductBtn").addEventListener("click", ()=>{
+      td = {step:1, student:null, coin:null};
+      renderDeduct();
+    });
   }
 }
 
+async function doDeduct(){
+  const i=td.student;
+  const now=new Date();
+  const ds=`${now.getMonth()+1}/${now.getDate()} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+  D.coins[i]-=td.coin;
+  D.history[i].push({label:"코인 사용",amount:-td.coin,date:ds,bonus:false});
+  await save();
+  td.step=3;
+  renderDeduct();
+}
+
+// ── 전체 현황 ──
 function renderAll(){
   const c=document.getElementById("teacherContent");
   const allHist=[];
@@ -364,40 +417,17 @@ function renderAll(){
     </div>`;
 }
 
-window.G={
-  gs(i){ ts.student=i; ts.step=2; renderGive(); },
-  ga(id){ ts.activity=id; ts.coin=null; ts.step=3; renderGive(); },
-  sc(cv){ ts.coin=cv; renderGive(); },
-  async doGive(){
-    const i=ts.student;
-    const act=activities.find(a=>a.id===ts.activity);
-    const now=new Date();
-    const ds=`${now.getMonth()+1}/${now.getDate()} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
-    D.coins[i]+=ts.coin;
-    D.history[i].push({label:act.label,amount:ts.coin,date:ds,bonus:false});
-    if(!D.completed[i].includes(act.id)) D.completed[i].push(act.id);
-    ts.bonusTriggered=false;
-    if(!D.bonusGiven[i]&&ALL_IDS.every(id=>D.completed[i].includes(id))){
-      D.bonusGiven[i]=true; D.coins[i]+=5;
-      D.history[i].push({label:"모든 활동 완료 보너스",amount:5,date:ds,bonus:true});
-      ts.bonusTriggered=true;
-    }
-    await save(); ts.step=4; renderGive();
-  },
-  ds(i){ td.student=i; td.coin=null; td.step=2; renderDeduct(); },
-  dc(cv){ td.coin=cv; renderDeduct(); },
-  async doDeduct(){
-    const i=td.student;
-    const now=new Date();
-    const ds=`${now.getMonth()+1}/${now.getDate()} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
-    D.coins[i]-=td.coin;
-    D.history[i].push({label:"코인 사용",amount:-td.coin,date:ds,bonus:false});
-    await save(); td.step=3; renderDeduct();
-  }
-};
+// ── 공통 ──
+function close1(id){ document.getElementById(id).classList.remove("open"); }
+document.querySelectorAll(".overlay").forEach(el=>{
+  el.addEventListener("click",e=>{ if(e.target===el) el.classList.remove("open"); });
+});
 
-window.ts=ts; window.td=td;
-window.renderGive=renderGive; window.renderDeduct=renderDeduct;
+// 전역 노출
+window.openPw  = ()=>{ document.getElementById("pwInput").value=""; document.getElementById("pwErr").textContent=""; document.getElementById("pwModal").classList.add("open"); setTimeout(()=>document.getElementById("pwInput").focus(),100); };
+window.chkPw   = ()=>{ if(document.getElementById("pwInput").value===PW){ close1("pwModal"); ts={step:1,student:null,activity:null,coin:null,bonusTriggered:false}; document.getElementById("teacherModal").classList.add("open"); switchTab(1); } else { document.getElementById("pwErr").textContent="비밀번호가 올바르지 않습니다"; } };
+window.close1  = close1;
+window.switchTab = switchTab;
 </script>
 </body>
 </html>
