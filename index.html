@@ -171,7 +171,7 @@ let D = {
 
 // 지급/차감 상태
 let ts = {step:1, student:null, activity:null, coin:null, bonusTriggered:false};
-let td = {step:1, student:null, coin:null};
+let td = {step:1, student:null, coin:null, reason:null, memo:""};
 
 async function save(){
   await set(ref(db,"app"), D);
@@ -333,7 +333,7 @@ function renderDeduct(){
           <span style="font-size:11px;color:#aaa;margin-left:3px">${D.coins[i]}코인</span>
         </button>`).join("")}</div>`;
     students.forEach((_,i)=>{
-      document.getElementById(`ds_${i}`).onclick=()=>{ td.student=i; td.coin=null; td.step=2; renderDeduct(); };
+      document.getElementById(`ds_${i}`).onclick=()=>{ td.student=i; td.coin=null; td.reason=null; td.memo=""; td.step=2; renderDeduct(); };
     });
 
   } else if(td.step===2){
@@ -344,37 +344,75 @@ function renderDeduct(){
       <div class="step-lbl">2단계 — 차감 코인 선택</div>
       ${opts.length
         ?`<div class="coin-opts">${opts.map(cv=>`
-            <button class="copt danger-opt${td.coin===cv?" active":""}" id="dc_${cv}">${cv}코인</button>`).join("")}</div>
-           <button class="main-btn red" id="doDeductBtn" ${td.coin===null?"disabled":""}>차감하기</button>`
+            <button class="copt danger-opt${td.coin===cv?" active":""}" id="dc_${cv}">${cv}코인</button>`).join("")}</div>`
         :`<p style="font-size:13px;color:#aaa;margin-bottom:14px">차감할 코인이 없습니다</p>`}
       <button class="back-btn" id="dback2">이전</button>`;
     opts.forEach(cv=>{
-      document.getElementById(`dc_${cv}`).onclick=()=>{ td.coin=cv; renderDeduct(); };
+      document.getElementById(`dc_${cv}`).onclick=()=>{ td.coin=cv; td.step=3; renderDeduct(); };
     });
-    if(opts.length) document.getElementById("doDeductBtn").onclick=doDeduct;
     document.getElementById("dback2").onclick=()=>{ td.step=1; renderDeduct(); };
 
+  } else if(td.step===3){
+    const s=students[td.student];
+    const canProceed = td.reason==="상품교환" || (td.reason==="기타" && td.memo.trim().length>0);
+    c.innerHTML=`<div style="font-size:13px;color:#888;margin-bottom:11px">${s.crop} ${s.name} · ${td.coin}코인 차감</div>
+      <div class="step-lbl">3단계 — 차감 사유 선택</div>
+      <div class="row-btns">
+        <button class="sbtn${td.reason==='상품교환'?' active':''}" id="r_상품교환">🎁 상품교환</button>
+        <button class="sbtn${td.reason==='기타'?' active':''}" id="r_기타">✏️ 기타</button>
+      </div>
+      ${td.reason==='기타'?`
+        <div class="step-lbl">내용 입력 (10자 이내)</div>
+        <input id="memoInput" type="text" maxlength="10" placeholder="사유를 입력하세요"
+          style="width:100%;padding:9px 12px;border:1px solid #ddd;border-radius:8px;font-size:14px;margin-bottom:12px;background:#f8f7f2;color:#2c2c2a;outline:none"
+          value="${td.memo}"/>
+      `:""}
+      <button class="main-btn red" id="doDeductBtn" ${canProceed?"":"disabled"}>차감하기</button>
+      <button class="back-btn" id="dback3">이전</button>`;
+    document.getElementById("r_상품교환").onclick=()=>{ td.reason="상품교환"; td.memo=""; renderDeduct(); };
+    document.getElementById("r_기타").onclick=()=>{ td.reason="기타"; td.memo=""; renderDeduct(); };
+    if(td.reason==='기타'){
+      const memoEl = document.getElementById("memoInput");
+      memoEl.oninput=(e)=>{
+        td.memo=e.target.value;
+        renderDeductBtn();
+      };
+      memoEl.focus();
+    }
+    document.getElementById("doDeductBtn").onclick=doDeduct;
+    document.getElementById("dback3").onclick=()=>{ td.step=2; renderDeduct(); };
+
   } else {
+    const label = td.reason==="기타" ? `기타(${td.memo})` : td.reason;
     c.innerHTML=`<div class="success-wrap">
       <div class="big">✅</div>
       <p>${students[td.student].name}에게서 ${td.coin}코인 차감!</p>
+      <p style="font-size:13px;color:#888;margin-top:6px">사유: ${label}</p>
       <button class="main-btn red" id="continueDeductBtn" style="margin-top:18px">계속 차감</button>
     </div>`;
     document.getElementById("continueDeductBtn").addEventListener("click", ()=>{
-      td = {step:1, student:null, coin:null};
+      td = {step:1, student:null, coin:null, reason:null, memo:""};
       renderDeduct();
     });
   }
+}
+
+function renderDeductBtn(){
+  const btn=document.getElementById("doDeductBtn");
+  if(!btn) return;
+  const canProceed = td.reason==="상품교환" || (td.reason==="기타" && td.memo.trim().length>0);
+  btn.disabled = !canProceed;
 }
 
 async function doDeduct(){
   const i=td.student;
   const now=new Date();
   const ds=`${now.getMonth()+1}/${now.getDate()} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+  const label = td.reason==="기타" ? `기타(${td.memo.trim()})` : td.reason;
   D.coins[i]-=td.coin;
-  D.history[i].push({label:"코인 사용",amount:-td.coin,date:ds,bonus:false});
+  D.history[i].push({label:label, amount:-td.coin, date:ds, bonus:false});
   await save();
-  td.step=3;
+  td.step=4;
   renderDeduct();
 }
 
