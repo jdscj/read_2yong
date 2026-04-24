@@ -144,7 +144,7 @@ const firebaseConfig = {
 const fbApp = initializeApp(firebaseConfig);
 const db = getDatabase(fbApp);
 
-const PW = "1234";
+const PW = "1234321";
 const students = [
   {id:0,name:"박희락",crop:"🌽"},
   {id:1,name:"허준우",crop:"🥬"},
@@ -153,11 +153,12 @@ const students = [
   {id:4,name:"김시후",crop:"🍓"},
 ];
 const activities = [
-  {id:"보물찾기",    label:"보물찾기",      coins:[1]},
-  {id:"환경아고마워", label:"환경아 고마워",  coins:[2,3,4]},
-  {id:"이장면이좋아", label:"이 장면이 좋아", coins:[1,2,3]},
-  {id:"책제목센스",  label:"책 제목 센스",   coins:[1]},
-  {id:"N행시짓기",   label:"N행시 짓기",    coins:[1]},
+  {id:"기본참가",    label:"기본 참가 코인",  coins:[1]},
+  {id:"보물찾기",    label:"보물찾기",        coins:[1]},
+  {id:"환경아고마워", label:"환경아 고마워",   coins:[2,3,4]},
+  {id:"이장면이좋아", label:"이 장면이 좋아",  coins:[1,2,3]},
+  {id:"책제목센스",  label:"책 제목 센스",    coins:[1]},
+  {id:"N행시짓기",   label:"N행시 짓기",     coins:[1]},
 ];
 const ALL_IDS = activities.map(a=>a.id);
 
